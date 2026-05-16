@@ -350,9 +350,49 @@ class SquareNode(MetaNode):
         grad_x = 2 * self.x * grad_z
         for node in self.parents:
             node.backward(grad_x)
+            
+class MSELossNode(MetaNode):
+    """Mean Squared Error loss node: j = 0.5 * (y_hat - y)^2"""
+
+    def __init__(self, y_hat: ValueNode, y: ValueNode, out: ValueNode):
+        super().__init__()
+        # connect inputs
+        y_hat.connect_to(self)
+        y.connect_to(self)
+        # connect output
+        self.connect_to(out)
+        self.y_hat_val: float = None
+        self.y_val: float = None
+
+    def receive_parent_value(self, v: float):
+        # store values in order: first y_hat, then y
+        if self.y_hat_val is None:
+            self.y_hat_val = v
+        elif self.y_val is None:
+            self.y_val = v
+        if self.y_hat_val is not None and self.y_val is not None:
+            self.input_ready = True
+
+    def reset_values(self):
+        self.y_hat_val = None
+        self.y_val = None
+        self.input_ready = False
+        for node in self.children:
+            node.reset_values()
+
+    def forward(self):
+        if self.input_ready:
+            loss_val = 0.5 * (self.y_hat_val - self.y_val) ** 2
+            for node in self.children:
+                node.receive_parent_value(loss_val)
+                node.forward()
+
+    def backward(self, grad_z):
+        # derivative wrt y_hat = (y_hat - y)
+        grad_y_hat = (self.y_hat_val - self.y_val) * grad_z
+        # derivative wrt y = -(y_hat - y)
+        grad_y = -(self.y_hat_val - self.y_val) * grad_z
+        self.parents[0].backward(grad_y_hat)
+        self.parents[1].backward(grad_y)
 
 
-# ######  TO DO  #########
-    # class MSELossNode(MetaNode):
-    # Advice: mimic the MultiplyNode and adapt the forward() and
-    # backward() methods
